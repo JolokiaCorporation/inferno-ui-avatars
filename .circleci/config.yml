@@ -37,6 +37,31 @@ commands:
                                           source $BASH_ENV
 
                   - run: echo "Image tag is set to $TAG"
+      pull-meta:
+            parameters:
+                  image-repo-name:
+                        type: string
+                        default: "inferno"
+                  image-tag:
+                        type: string
+                        default: ""
+                  deploy-environment:
+                        type: string
+                        default: ""
+            steps:
+                  - run:
+                        name: "Checkout pipeline repo, set environment variables, and run metadata script"
+                        command: |  
+                              if ! [ -d ./pipeline ]; then
+                                    git clone git@github.com:JolokiaCorporation/pipeline.git
+                              fi
+                              cd pipeline
+                              echo "export IMAGE_REPO_NAME=<<parameters.image-repo-name>>"
+                              echo "export IMAGE_TAG=<<parameters.image-tag>>"
+                              echo "export DEPLOY_ENVIRONMENT=<<parameters.deploy-environment>>" 
+                              python3 build_metadata.py
+                  - store_artifacts:
+                        path: ./pipeline/build_metadata.txt
 
 jobs:
  build-and-push-image:
@@ -60,7 +85,7 @@ jobs:
             - checkout
             - set-image-tag
             - pull-meta:
-                  image-tag: <<parameters.environment-name>>-<<parameters.namespace>>-$TAG
+                  image-tag: $TAG
             - azure-acr/build-and-push-image:
                   login-server-name: infernocoreprd.azurecr.io
                   repo: inferno-ui-avatar
