@@ -1,13 +1,77 @@
-# Use the latest 2.1 version of CircleCI pipeline process engine. See: https://circleci.com/docs/2.0/configuration-reference
 version: 2.1
-# Use a package of configuration called an orb.
 orbs:
-  # Declare a dependency on the welcome-orb
-  welcome: circleci/welcome-orb@0.4.1
-# Orchestrate or schedule a set of jobs
+  node: circleci/node@3.0.0
+  azure-acr: circleci/azure-acr@0.2.0
+  azure-cli: circleci/azure-cli@1.1.0
+  kubernetes: circleci/kubernetes@0.11.2
+  helm: circleci/helm@1.0.1
+
+
+commands:
+      set-azure-credentials:
+      #sets the azure login credentials to the correct environment.
+            steps:
+                  - run:
+                        name: "Set azure login credentials to default environment variables"
+                        command: |
+                              echo "export AZURE_SP=PRODUCTION_AZURE_SP" >> $BASH_ENV
+                              echo "export AZURE_SP_PASSWORD=$PRODUCTION_AZURE_SP_PASSWORD" >> $BASH_ENV
+                              echo "export AZURE_SP_TENANT=$PRODUCTION_AZURE_SP_TENANT" >> $BASH_ENV
+                              source $BASH_ENV
+      set-image-tag:
+      #checks for the build trigger (git tag vs code change) and sets the image tag to the appropriate corresponding value.
+            steps:
+                  - run: 
+                        name: "Set environment variables for the git tag and the commit reference"
+                        command: |     
+                              echo "export GIT_TAG=<<pipeline.git.tag>>" >> $BASH_ENV
+                              echo "export COMMIT_ID=$(echo $CIRCLE_SHA1 | cut -c 1-7)" >> $BASH_ENV
+                              source $BASH_ENV
+                  - run: echo "export TAG=${COMMIT_ID}" >> $BASH_ENV; source $BASH_ENV
+                  - when: 
+                        condition: <<pipeline.git.tag>>
+                        steps:      
+                              - run:
+                                    command: | 
+                                          echo "export TAG=${GIT_TAG}" >> $BASH_ENV
+                                          source $BASH_ENV
+
+                  - run: echo "Image tag is set to $TAG"
+
+jobs:
+ build-and-push-image:
+      docker:
+            - image: infernocoreprd.azurecr.io/inferno-circle:latest
+              auth:
+                  username: $DOCKERHUB_USER
+                  password: $DOCKERHUB_PASSWORD
+      parameters:
+            #Colloquial environment name reference for tagging and communication purposes, usually maps to namespace 
+            environment-name:
+                  type: string
+                  default: "staging"
+            namespace:
+                  type: string
+                  default: core
+      steps:
+            - setup_remote_docker:
+                  version: 20.10.2
+            - set-azure-credentials
+            - checkout
+            - set-image-tag
+            - pull-meta:
+                  image-tag: <<parameters.environment-name>>-<<parameters.namespace>>-$TAG
+            - azure-acr/build-and-push-image:
+                  login-server-name: infernocoreprd.azurecr.io
+                  repo: inferno-ui-avatar
+                  registry-name: infernocoreprd
+                  tag: $TAG
+
 workflows:
-  # Name the workflow "welcome"
-  welcome:
-    # Run the welcome/run job in its own container
+  staging-build-and-deploy:
     jobs:
-      - welcome/run
+      - build-and-push-image:
+          name: staging-build-and-push-image
+          context:
+              - Production
+              - Global
