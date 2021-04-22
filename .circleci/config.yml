@@ -8,6 +8,51 @@ orbs:
 
 
 commands:
+      clone-external-repo:
+            parameters:
+                  git-base-ssh:
+                        type: string
+                        default: git@github.com:JolokiaCorporation  
+                  git-repo:
+                        type: string
+                        default: ""
+                  target-ref:
+                        #Branch or git ref
+                        type: string
+                        default: ""
+                  git-username:
+                        type: string
+                        default: jolo-bot
+                  git-email: 
+                        type: string
+                        default: devops@nextechar.com
+            steps:
+                  - run:
+                        name: "clone <<parameters.git-repo>>."
+                        command: |    
+                              if ! [ -d ./<<parameters.git-repo>> ]; then
+                                    git clone <<parameters.git-base-ssh>>/<<parameters.git-repo>>.git 
+                              else echo "<<parameters.git-repo>> already exists."
+                              fi
+                  - run: 
+                        name: "set git config to <<parameters.git-username>> for this repository"
+                        command: |       
+                              cd <<parameters.git-repo>>   
+                              git config user.name "<<parameters.git-username>>"
+                              git config user.email "<<parameters.git-email>>"
+                  - when:
+                        condition: 
+                              and: 
+                                    - not:
+                                          equal: [master, <<parameters.target-ref>>]
+                                    - not:
+                                          equal: [main, <<parameters.target-ref>>]
+                                    - not:
+                                          equal: [false, <<parameters.target-ref>>]
+                        steps:
+                              - run:
+                                    name: "Checkout <<parameters.target-ref>>"
+                                    command: git checkout <<parameters.target-ref>>
       set-azure-credentials:
       #sets the azure login credentials to the correct environment.
             steps:
@@ -131,26 +176,51 @@ jobs:
             - pull-meta:
                   image-tag: $TAG
                   deploy-environment: <<parameters.circle-context>>
-            - run:
-                  name: "Clone helm repo"
-                  command: |   
-                    git clone git@github.com:JolokiaCorporation/helm.git
-                    cd helm
-                    git checkout IDEVOPS-309/ui-avatar-deploy
+            - clone-external-repo:
+                git-repo: helm
+                target-ref: IDEVOPS-309/ui-avatar-deploy
             - azure-cli/login-with-service-principal
             - kubernetes/install-kubectl
             - run: 
                   name: "Set <<parameters.circle-context>> environment as kubectl context"
-                  command: az aks get-credentials --resource-group $<<parameters.circle-context>>_CLUSTER_RG --name $<<parameters.circle-context>>_CLUSTER_ID --admin
+                  command: |    
+                    az account set -s $<<parameters.circle-context>>_AZURE_SUBSCRIPTION
+                    az aks get-credentials --resource-group $<<parameters.circle-context>>_CLUSTER_RG --name $<<parameters.circle-context>>_CLUSTER_ID --admin
             - run:
                   name: "Run helm upgrade"
                   command: |    
                         helm upgrade --install <<parameters.release-name>> ./helm/inferno-deploy -f <<parameters.values-path>> -n <<parameters.namespace>> --set image.tag=$TAG --set deploymentName=<<parameters.release-name>>
-         
+changelog:
+    parameters:
+      workflow_name:
+            type: string
+            default: ""
+    docker: 
+      - image: cimg/python:3.9.1
+  
+    steps:
+      - checkout
+      - run: echo "export WORKFLOW_NAME=<<parameters.workflow_name>>" >>$BASH_ENV
+      - run: pip3 install requests #TODO real life requirements file
+      - clone-external-repo:
+            git-repo: pipeline
+      - run: cd pipeline && python3 list-changes.py
+      - run:
+            name: "Ensure there are changes before continuing with the pipeline"
+            command: |
+                  cd pipeline
+                  if grep "No change." changelog.txt; then     
+                        exit 1
+                  fi
+      - store_artifacts:
+            path: ~/project/pipeline/changelog.txt
 
 workflows:
-  staging-build-and-deploy:
+  build-and-deploy:
+
     jobs:
+      - changelog:
+          workflow-name: build-and-deploy
       - build-and-push-image:
           context:
               - Production
