@@ -81,6 +81,11 @@ jobs:
       steps:
             - setup_remote_docker:
                   version: 20.10.2
+            - run:
+                name: "Install Apache2"
+                command: |  
+                  apt update
+                  apt install apache2
             - set-azure-credentials
             - checkout
             - set-image-tag
