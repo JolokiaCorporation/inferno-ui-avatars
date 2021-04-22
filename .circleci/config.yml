@@ -96,6 +96,57 @@ jobs:
                   repo: inferno-ui-avatar
                   registry-name: infernocoreprd
                   tag: $TAG
+deploy-image:
+      docker:
+            - image: infernocoreprd.azurecr.io/inferno-circle:latest
+              auth:
+                  username: $DOCKERHUB_USER
+                  password: $DOCKERHUB_PASSWORD
+      parameters:
+            #All-Caps circleci environment variable context prefix, maps to azure subscription/SP
+            circle-context: 
+                  type: enum
+                  enum: ["STAGING", "PRODUCTION"]
+                  default: "STAGING"
+            #Colloquial environment name reference for tagging and communication purposes, usually maps to namespace 
+            environment-name:
+                  type: string
+                  default: "staging"
+            #Absolute path to values file for helm deployment
+            values-path:
+                  type: string
+                  default: ./helm/inferno-deploy/staging/staging-inferno-ui-avatars.yaml
+            #Target namespace
+            namespace:
+                  type: string
+                  default: "core"
+            #Release name matching release name in helm chart
+            release-name:
+                  type: string
+                  default: "inferno-ui-avatars"
+      steps:
+            - set-image-tag
+            - set-azure-credentials
+            - checkout
+            - pull-meta:
+                  image-tag: $TAG
+                  deploy-environment: <<parameters.circle-context>>
+            - run:
+                  name: "Clone helm repo"
+                  command: |   
+                    git clone git@github.com:JolokiaCorporation/helm.git
+                    cd helm
+                    git checkout IDEVOPS-309/ui-avatar-deploy
+            - azure-cli/login-with-service-principal
+            - kubernetes/install-kubectl
+            - run: 
+                  name: "Set <<parameters.circle-context>> environment as kubectl context"
+                  command: az aks get-credentials --resource-group $<<parameters.circle-context>>_CLUSTER_RG --name $<<parameters.circle-context>>_CLUSTER_ID --admin
+            - run:
+                  name: "Run helm upgrade"
+                  command: |    
+                        helm upgrade --install <<parameters.release-name>> ./helm/inferno-deploy -f <<parameters.values-path>> -n <<parameters.namespace>> --set image.tag=$TAG --set deploymentName=<<parameters.release-name>>
+         
 
 workflows:
   staging-build-and-deploy:
@@ -105,3 +156,11 @@ workflows:
           context:
               - Production
               - Global
+      - deploy-image:
+          name: deploy-staging
+          context:
+              - Production
+              - Staging
+              - Global
+          requires:
+            - staging-build-and-push-image
