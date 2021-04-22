@@ -190,7 +190,7 @@ jobs:
                   name: "Run helm upgrade"
                   command: |    
                         helm upgrade --install <<parameters.release-name>> ./helm/inferno-deploy -f <<parameters.values-path>> -n <<parameters.namespace>> --set image.tag=$TAG --set deploymentName=<<parameters.release-name>>
-changelog:
+ changelog:
     parameters:
       workflow_name:
             type: string
