@@ -1,0 +1,272 @@
+version: 2.1
+orbs:
+  node: circleci/node@3.0.0
+  azure-acr: circleci/azure-acr@0.2.0
+  azure-cli: circleci/azure-cli@1.1.0
+  kubernetes: circleci/kubernetes@0.11.2
+  helm: circleci/helm@1.0.1
+
+
+commands:
+      clone-external-repo:
+            parameters:
+                  git-base-ssh:
+                        type: string
+                        default: git@github.com:JolokiaCorporation  
+                  git-repo:
+                        type: string
+                        default: ""
+                  target-ref:
+                        #Branch or git ref
+                        type: string
+                        default: ""
+                  git-username:
+                        type: string
+                        default: jolo-bot
+                  git-email: 
+                        type: string
+                        default: devops@nextechar.com
+            steps:
+                  - run:
+                        name: "clone <<parameters.git-repo>>."
+                        command: |    
+                              if ! [ -d ./<<parameters.git-repo>> ]; then
+                                    git clone <<parameters.git-base-ssh>>/<<parameters.git-repo>>.git 
+                              else echo "<<parameters.git-repo>> already exists."
+                              fi
+                  - run: 
+                        name: "set git config to <<parameters.git-username>> for this repository"
+                        command: |       
+                              cd <<parameters.git-repo>>   
+                              git config user.name "<<parameters.git-username>>"
+                              git config user.email "<<parameters.git-email>>"
+                  - when:
+                        condition: 
+                              and: 
+                                    - not:
+                                          equal: [master, <<parameters.target-ref>>]
+                                    - not:
+                                          equal: [main, <<parameters.target-ref>>]
+                                    - not:
+                                          equal: [false, <<parameters.target-ref>>]
+                        steps:
+                              - run:
+                                    name: "Checkout <<parameters.target-ref>>"
+                                    command: cd <<parameters.git-repo>> && git checkout <<parameters.target-ref>>
+      set-azure-credentials:
+      #sets the azure login credentials to the correct environment.
+            steps:
+                  - run:
+                        name: "Set azure login credentials to default environment variables"
+                        command: |
+                              echo "export AZURE_SP=$PRODUCTION_AZURE_SP" >> $BASH_ENV
+                              echo "export AZURE_SP_PASSWORD=$PRODUCTION_AZURE_SP_PASSWORD" >> $BASH_ENV
+                              echo "export AZURE_SP_TENANT=$PRODUCTION_AZURE_SP_TENANT" >> $BASH_ENV
+                              source $BASH_ENV
+      set-image-tag:
+      #checks for the build trigger (git tag vs code change) and sets the image tag to the appropriate corresponding value.
+            steps:
+                  - run: 
+                        name: "Set environment variables for the git tag and the commit reference"
+                        command: |     
+                              echo "export GIT_TAG=<<pipeline.git.tag>>" >> $BASH_ENV
+                              echo "export COMMIT_ID=$(echo $CIRCLE_SHA1 | cut -c 1-7)" >> $BASH_ENV
+                              source $BASH_ENV
+                  - run: echo "export TAG=${COMMIT_ID}" >> $BASH_ENV; source $BASH_ENV
+                  - when: 
+                        condition: <<pipeline.git.tag>>
+                        steps:      
+                              - run:
+                                    command: | 
+                                          echo "export TAG=${GIT_TAG}" >> $BASH_ENV
+                                          source $BASH_ENV
+
+                  - run: echo "Image tag is set to $TAG"
+      pull-meta:
+            parameters:
+                  image-repo-name:
+                        type: string
+                        default: "inferno"
+                  image-tag:
+                        type: string
+                        default: ""
+                  deploy-environment:
+                        type: string
+                        default: ""
+            steps:
+                  - run:
+                        name: "Checkout pipeline repo, set environment variables, and run metadata script"
+                        command: |  
+                              if ! [ -d ./pipeline ]; then
+                                    git clone git@github.com:JolokiaCorporation/pipeline.git
+                              fi
+                              cd pipeline
+                              echo "export IMAGE_REPO_NAME=<<parameters.image-repo-name>>"
+                              echo "export IMAGE_TAG=<<parameters.image-tag>>"
+                              echo "export DEPLOY_ENVIRONMENT=<<parameters.deploy-environment>>" 
+                              python3 build_metadata.py
+                  - store_artifacts:
+                        path: ./pipeline/build_metadata.txt
+
+jobs:
+    changelog:
+      parameters:
+        workflow_name:
+              type: string
+              default: ""
+      docker: 
+        - image: cimg/python:3.9.1
+    
+      steps:
+        - checkout
+        - run: echo "export WORKFLOW_NAME=<<parameters.workflow_name>>" >>$BASH_ENV
+        - run: pip3 install requests #TODO real life requirements file
+        - clone-external-repo:
+              git-repo: pipeline
+        - run: cd pipeline && python3 list-changes.py
+        - run:
+              name: "Ensure there are changes before continuing with the pipeline"
+              command: |
+                    cd pipeline
+                    if grep "No change." changelog.txt; then     
+                          exit 1
+                    fi
+        - store_artifacts:
+              path: ~/project/pipeline/changelog.txt
+    build-and-push-image:
+      docker:
+            - image: infernocoreprd.azurecr.io/inferno-circle:latest
+              auth:
+                  username: $DOCKERHUB_USER
+                  password: $DOCKERHUB_PASSWORD
+      parameters:
+            #Colloquial environment name reference for tagging and communication purposes, usually maps to namespace 
+            environment-name:
+                  type: string
+                  default: "staging"
+            namespace:
+                  type: string
+                  default: core
+      steps:
+            - setup_remote_docker:
+                  version: 20.10.2
+            - run:
+                name: "Install Apache2"
+                command: |  
+                  sudo apt update
+                  sudo apt install apache2
+            - set-azure-credentials
+            - checkout
+            - set-image-tag
+            - pull-meta:
+                  image-tag: $TAG
+            - azure-acr/build-and-push-image:
+                  login-server-name: infernocoreprd.azurecr.io
+                  repo: inferno-ui-avatars
+                  registry-name: infernocoreprd
+                  tag: $TAG
+    deploy-image:
+      docker:
+            - image: infernocoreprd.azurecr.io/inferno-circle:latest
+              auth:
+                  username: $DOCKERHUB_USER
+                  password: $DOCKERHUB_PASSWORD
+      parameters:
+            #All-Caps circleci environment variable context prefix, maps to azure subscription/SP
+            circle-context: 
+                  type: enum
+                  enum: ["STAGING", "PRODUCTION"]
+                  default: "STAGING"
+            #Colloquial environment name reference for tagging and communication purposes, usually maps to namespace 
+            environment-name:
+                  type: string
+                  default: "staging"
+            #Absolute path to values file for helm deployment
+            values-path:
+                  type: string
+                  default: ./helm/inferno-deploy/staging/staging-inferno-ui-avatars.yaml
+            #Target namespace
+            namespace:
+                  type: string
+                  default: "core"
+            #Release name matching release name in helm chart
+            release-name:
+                  type: string
+                  default: "inferno-ui-avatars"
+      steps:
+            - set-image-tag
+            - set-azure-credentials
+            - checkout
+            - pull-meta:
+                  image-tag: $TAG
+                  deploy-environment: <<parameters.circle-context>>
+            - clone-external-repo:
+                git-repo: helm
+            - azure-cli/login-with-service-principal
+            - kubernetes/install-kubectl
+            - run: 
+                  name: "Set <<parameters.circle-context>> environment as kubectl context"
+                  command: |    
+                    az account set -s $<<parameters.circle-context>>_AZURE_SUBSCRIPTION
+                    az aks get-credentials --resource-group $<<parameters.circle-context>>_CLUSTER_RG --name $<<parameters.circle-context>>_CLUSTER_ID --admin
+            - run:
+                  name: "Run helm upgrade"
+                  command: |    
+                        helm upgrade --install <<parameters.release-name>> ./helm/inferno-deploy -f <<parameters.values-path>> -n <<parameters.namespace>> --set image.tag=$TAG --set deploymentName=<<parameters.release-name>>
+
+
+workflows:
+
+  staging-build-and-deploy:
+
+    jobs:
+      - build-and-push-image:
+          context:
+              - Production
+              - Global
+          filters:
+            branches: 
+              only: master
+            tags:
+              only: \^(prd|stg)-.*\
+      - deploy-image:
+          name: deploy-staging
+          context:
+              - Production
+              - Staging
+              - Global
+          requires:
+            - build-and-push-image
+
+  production-build-and-deploy:
+
+    jobs:
+      - build-and-push-image:
+          context:
+              - Production
+              - Global
+          filters:
+            branches: 
+              ignore: \.*\
+            tags:
+              only: \^prd-.*\
+      - hold-production:
+          type: approval
+          filters:
+            branches: 
+              ignore: \.*\
+            tags:
+              only: \^prd-.*\
+      - deploy-image:
+          name: deploy-production
+          circle-context: PRODUCTION
+          environment-name: production
+          values-path: ./helm/inferno-deploy/prod/us/us-inferno-ui-avatars.yaml
+          context:
+              - Production
+              - Global
+          requires: 
+            - hold-production
+            - build-and-push-image
+  
+          
