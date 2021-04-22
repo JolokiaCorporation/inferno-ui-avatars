@@ -221,8 +221,8 @@ workflows:
   staging-build-and-deploy:
 
     jobs:
-      # - changelog:
-      #     workflow_name: staging-build-and-deploy
+      - changelog:
+          workflow_name: staging-build-and-deploy
       - build-and-push-image:
           context:
               - Production
@@ -239,8 +239,8 @@ workflows:
   production-build-and-deploy:
 
     jobs:
-      # - changelog:
-      #     workflow_name: production-build-and-deploy
+      - changelog:
+          workflow_name: production-build-and-deploy
       - build-and-push-image:
           context:
               - Production
