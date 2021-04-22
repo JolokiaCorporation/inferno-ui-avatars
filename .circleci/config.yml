@@ -52,7 +52,7 @@ commands:
                         steps:
                               - run:
                                     name: "Checkout <<parameters.target-ref>>"
-                                    command: git checkout <<parameters.target-ref>>
+                                    command: cd <<parameters.git-repo>> && git checkout <<parameters.target-ref>>
       set-azure-credentials:
       #sets the azure login credentials to the correct environment.
             steps:
