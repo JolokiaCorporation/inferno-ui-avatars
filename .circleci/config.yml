@@ -96,7 +96,7 @@ jobs:
                   repo: inferno-ui-avatar
                   registry-name: infernocoreprd
                   tag: $TAG
-deploy-image:
+ deploy-image:
       docker:
             - image: infernocoreprd.azurecr.io/inferno-circle:latest
               auth:
