@@ -152,10 +152,11 @@ workflows:
   staging-build-and-deploy:
     jobs:
       - build-and-push-image:
-          name: staging-build-and-push-image
           context:
               - Production
               - Global
+      - hold-production:
+          type: approval
       - deploy-image:
           name: deploy-staging
           context:
@@ -163,4 +164,15 @@ workflows:
               - Staging
               - Global
           requires:
-            - staging-build-and-push-image
+            - build-and-push-image
+      - deploy-image:
+          name: deploy-production
+          circle-context: PRODUCTION
+          environment-name: production
+          values-path: ./helm/inferno-deploy/prod/us/us-inferno-ui-avatars.yaml
+          context:
+              - Production
+              - Global
+          requires: 
+            - hold-production
+            - build-and-push-image
