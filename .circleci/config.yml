@@ -202,7 +202,6 @@ jobs:
                   deploy-environment: <<parameters.circle-context>>
             - clone-external-repo:
                 git-repo: helm
-                target-ref: IDEVOPS-309/ui-avatar-deploy
             - azure-cli/login-with-service-principal
             - kubernetes/install-kubectl
             - run: 
@@ -239,8 +238,8 @@ workflows:
   production-build-and-deploy:
 
     jobs:
-      - changelog:
-          workflow_name: production-build-and-deploy
+      # - changelog:
+      #     workflow_name: production-build-and-deploy
       - build-and-push-image:
           context:
               - Production
