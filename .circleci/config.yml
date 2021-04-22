@@ -220,12 +220,15 @@ workflows:
   staging-build-and-deploy:
 
     jobs:
-      - changelog:
-          workflow_name: staging-build-and-deploy
       - build-and-push-image:
           context:
               - Production
               - Global
+          filters:
+            branches: 
+              only: master
+            tags:
+              only: \^(prd|stg)-.*\
       - deploy-image:
           name: deploy-staging
           context:
@@ -238,14 +241,22 @@ workflows:
   production-build-and-deploy:
 
     jobs:
-      # - changelog:
-      #     workflow_name: production-build-and-deploy
       - build-and-push-image:
           context:
               - Production
               - Global
+          filters:
+            branches: 
+              ignore: \.*\
+            tags:
+              only: \^prd-.*\
       - hold-production:
           type: approval
+          filters:
+            branches: 
+              ignore: \.*\
+            tags:
+              only: \^prd-.*\
       - deploy-image:
           name: deploy-production
           circle-context: PRODUCTION
