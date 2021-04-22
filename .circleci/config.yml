@@ -93,7 +93,7 @@ jobs:
                   image-tag: $TAG
             - azure-acr/build-and-push-image:
                   login-server-name: infernocoreprd.azurecr.io
-                  repo: inferno-ui-avatar
+                  repo: inferno-ui-avatars
                   registry-name: infernocoreprd
                   tag: $TAG
  deploy-image:
