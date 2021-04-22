@@ -14,7 +14,7 @@ commands:
                   - run:
                         name: "Set azure login credentials to default environment variables"
                         command: |
-                              echo "export AZURE_SP=PRODUCTION_AZURE_SP" >> $BASH_ENV
+                              echo "export AZURE_SP=$PRODUCTION_AZURE_SP" >> $BASH_ENV
                               echo "export AZURE_SP_PASSWORD=$PRODUCTION_AZURE_SP_PASSWORD" >> $BASH_ENV
                               echo "export AZURE_SP_TENANT=$PRODUCTION_AZURE_SP_TENANT" >> $BASH_ENV
                               source $BASH_ENV
