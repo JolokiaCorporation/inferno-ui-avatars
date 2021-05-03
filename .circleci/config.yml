@@ -213,7 +213,22 @@ jobs:
                   name: "Run helm upgrade"
                   command: |    
                         helm upgrade --install <<parameters.release-name>> ./helm/inferno-deploy -f <<parameters.values-path>> -n <<parameters.namespace>> --set image.tag=$TAG --set deploymentName=<<parameters.release-name>>
-
+      acr-purge:
+            docker:
+            - image: infernocoreprd.azurecr.io/inferno-circle:latest
+            auth:
+                  username: $DOCKERHUB_USER
+                  password: $DOCKERHUB_PASSWORD
+            environment:
+                  PERSIST_DAYS: 60
+                  REPOSITORY_NAME: inferno-ui-avatars
+                  REGISTRY_NAME: infernocoreprd 
+            steps: 
+                  - checkout
+                  - azure-cli/login-with-service-principal
+                  - clone-external-repo:
+                        git-repo: pipeline
+                  - run: cd pipeline && python3 acr-purge.py
 
 workflows:
 
@@ -268,5 +283,20 @@ workflows:
           requires: 
             - hold-production
             - build-and-push-image
+  image-cleanup:
+
+      triggers:
+            - schedule:
+                  cron: "0 0 * * *"
+                  filters:
+                        branches: 
+                              only: circleci-project-setup
+      jobs:
+      
+        - acr-purge:
+            context:
+                  - Global
+                  - Production
+                  - Staging
   
           
