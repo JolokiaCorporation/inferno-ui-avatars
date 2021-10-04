@@ -1,0 +1,138 @@
+# Staging values for inferno-deploy.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+# Release Name
+deploymentName: inferno-ui-avatars
+
+# Pod running port
+containerPort: 80
+
+# Overides docker entrypoint command
+# command:
+#   shell: ["/bin/sh"]
+#   args:
+#     - "-c"
+#     - "/opt/nginx/sbin/nginx -c /opt/nginx/config/nginx.conf"
+
+# Labels to be set to pod
+labels:
+  app: inferno-ui-avatars
+  region: eastus
+  environment: staging
+  provider: AZURE
+
+# Image registry details
+image:
+  registry: infernocoreprd.azurecr.io
+  repository: inferno-ui-avatars
+  tag: latest
+  pullPolicy: Always
+
+# Set desired replica count
+replicaCount: 1
+
+# Scaling strategy
+strategy:
+  rollingUpdate:
+    maxSurge: 25%
+    maxUnavailable: 25%
+
+podSecurityPolicy:
+  enabled: true
+  annotations:
+    seccomp.security.alpha.kubernetes.io/allowedProfileNames: 'docker/default'
+    apparmor.security.beta.kubernetes.io/allowedProfileNames: 'runtime/default'
+    seccomp.security.alpha.kubernetes.io/defaultProfileName:  'docker/default'
+    apparmor.security.beta.kubernetes.io/defaultProfileName:  'runtime/default'
+  spec:
+    privileged: false
+    # Required to prevent escalations to root.
+    allowPrivilegeEscalation: false
+    # This is redundant with non-root + disallow privilege escalation,
+    # but we can provide it for defense in depth.
+    requiredDropCapabilities:
+      - ALL
+    fsGroup:
+      rule: RunAsAny
+    runAsUser:
+      rule: RunAsAny
+    runAsGroup:
+      rule: RunAsAny
+    seLinux:
+      # This policy assumes the nodes are using AppArmor rather than SELinux.
+      rule: RunAsAny
+    supplementalGroups:
+      rule: RunAsAny
+    # Allow core volume types.
+    volumes:
+      - 'configMap'
+      - 'emptyDir'
+      - 'projected'
+      - 'secret'
+      - 'downwardAPI'
+      # Assume that persistentVolumes set up by the cluster admin are safe to use.
+      - 'persistentVolumeClaim'
+    hostNetwork: false
+    hostIPC: false
+    hostPID: false
+    readOnlyRootFilesystem: false
+
+# CPU and memory soft and hard limits
+resources:
+  limits:
+    cpu: 200m
+    memory: 512Mi
+  requests:
+    cpu: 100m
+    memory: 256Mi
+
+# Scaling based on cpu and memory metrics
+autoscaling:
+  enabled: true
+  minReplicas: 1
+  maxReplicas: 1
+  targetCPUUtilizationPercentage: 80
+  targetMemoryUtilizationPercentage: 80
+
+## Additional environment variables to set
+extraEnvs:
+  - name: DD_AGENT_HOST
+    valueFrom:
+      fieldRef:
+        fieldPath: status.hostIP
+
+## Liveness and readiness probe values
+# livenessProbe:
+#   httpGet:
+#     path: /
+#     port: 443
+#     scheme: HTTP
+#   initialDelaySeconds: 10
+#   periodSeconds: 10
+#   timeoutSeconds: 5
+#   successThreshold: 1
+#   failureThreshold: 3
+
+# readinessProbe:
+#   httpGet:
+#     path: health
+#     port: 443
+#     scheme: HTTP
+#   initialDelaySeconds: 10
+#   periodSeconds: 10
+#   timeoutSeconds: 5
+#   successThreshold: 1
+#   failureThreshold: 3
+
+# Service Name to access the pods
+service:
+  name: inferno-ui-avatars
+
+# To set separate configmap for each microservice
+configmapPerMicroservice:
+  enabled: false
+
+# To set separate secret for each microservice
+secretPerMicroservice:
+  enabled: false
