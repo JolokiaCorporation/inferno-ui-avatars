@@ -1,0 +1,26 @@
+# Variables template for dev environment ntar-holox-admin-portal
+
+variables:
+  #user-defined variables
+  pipelineRef: refs/head/master #pipeline repo git reference if not master
+
+  #pipeline details
+  vmImageName: 'ubuntu-latest'
+  adoProject: ignitex
+
+  #environment details
+  environmentName: eastus
+  adoEnvironment: ignitex-eastus
+  azureSubscription: 'azure_prod_subscription'
+  clusterName: 'nt-ar-prod-us'
+  clusterRG: 'nt-ar-prod-us-rg'
+  namespace: core
+
+  # Service Details
+  serviceName: inferno-ui-avatars
+  repository_name: inferno-ui-avatars
+
+  # Docker details
+  dockerFilePath: '**/Dockerfile'
+  dockerRegistryServiceConnection: 'infernocoreprd'
+  dockerBuildArg: 

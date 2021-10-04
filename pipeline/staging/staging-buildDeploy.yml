@@ -1,0 +1,49 @@
+# Full build and deploy pipeline for dockerized k8s service with in-repo helm file. 
+# Stage templates are pulled from JolokiaCorporation/pipeline repo
+# Stages: 
+## - Setup Stage: Set docker image tag, save changelog artifact
+## - Build Stage: build image from in-repo dockerfile, push image to acr
+## - Deploy Stage: Deploy using in-repo helm chart to ado environment
+## - Cleanup Stage: purge unused acr images 
+
+## Triggers
+trigger:
+  branches:
+    include:
+     - staging
+     - master
+  paths:
+    exclude: 
+     - helm/
+    include:
+     - /
+     
+pr:
+  branches: 
+    include:
+      - staging
+      - master
+
+## Extend variables template
+variables: 
+  - template: variables.yml
+
+## External resources
+resources:  
+  repositories:
+    - repository: self
+    - repository: pipeline
+      type: github 
+      endpoint: JolokiaCorporation
+      name: JolokiaCorporation/pipeline
+      refs: $(pipelineRef)
+
+# Pool defaults to 'ubuntu-latest'
+pool: 
+  vmImage: $(vmImageName)
+
+stages:
+   - template: templates/stages/buildDeploySetup.yaml@pipeline
+   - template: templates/stages/dockerBuildandPush.yaml@pipeline
+   - template: templates/stages/helmDeploy.yaml@pipeline
+   - template: templates/stages/cleanup.yaml@pipeline
