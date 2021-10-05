@@ -1,4 +1,4 @@
-FROM kstaken/apache2
+FROM httpd
 LABEL name "my-docker-deployment"
 RUN apt-get update 
 RUN apt-get install -y php5 curl git zip libapache2-mod-php5 php5-mysql php5-cli 
