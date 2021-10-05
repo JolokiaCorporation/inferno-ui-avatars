@@ -1,7 +1,7 @@
 FROM httpd
 LABEL name "my-docker-deployment"
 RUN apt-get update 
-RUN apt-get install -y php5 curl git zip libapache2-mod-php5 php5-mysql php5-cli 
+RUN apt-get install -y php curl git zip libapache2-mod-php php-mysql php-cli 
 RUN apt-get clean && rm -rf /var/lib/apt/lists/*
 
 COPY Utils /var/www/Utils
